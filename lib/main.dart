@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
@@ -7,6 +8,8 @@ import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:mime/mime.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -249,6 +252,11 @@ class _ChatListPageState extends State<ChatListPage> {
                               : myUserId == userId2
                                   ? chat['user1_imageUrl']
                                   : '404',
+                          userPhoto: myUserId == userId1
+                              ? chat['user1_imageUrl']
+                              : myUserId == userId2
+                                  ? chat['user2_imageUrl']
+                                  : '404',
                         ),
                       ),
                     );
@@ -264,12 +272,14 @@ class _ChatListPageState extends State<ChatListPage> {
 class ChatPage extends StatefulWidget {
   final String chatId;
   final String userId;
+  final String userPhoto;
   final String userName;
   final String lawanBicara;
   final String lawanBicaraPhoto;
   ChatPage({
     required this.chatId,
     required this.userId,
+    required this.userPhoto,
     required this.userName,
     required this.lawanBicara,
     required this.lawanBicaraPhoto,
@@ -303,51 +313,104 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _loadMessages() async {
-    final response = await http.get(
-      Uri.parse('${apiBaseUrl}get-messages.php?chat_id=${widget.chatId}'),
-    );
+  final response = await http.get(
+    Uri.parse('${apiBaseUrl}get-messages.php?chat_id=${widget.chatId}'),
+  );
 
-    if (response.statusCode == 200) {
-      final List<dynamic> messagesJson = jsonDecode(response.body);
-      print("${jsonDecode(response.body)}");
+  if (response.statusCode == 200) {
+    final List<dynamic> messagesJson = jsonDecode(response.body);
+    print("${jsonDecode(response.body)}");
 
-      if (messagesJson.isNotEmpty) {
-        final List<types.Message> messages = messagesJson.map((json) {
-          final messageJson = json as Map<String, dynamic>;
-          return types.TextMessage(
-            author: types.User(
-              id: messageJson['author']['id'] as String,
-              firstName: "${messageJson['author']['firstName'] as String}" +
-                  " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
-                  " ${messageJson['author']['imageUrl']}",
-              // lastName: messageJson['author']['lastName'] as String,
-              imageUrl: (messageJson['author']['imageUrl'] != '' &&
-                      messageJson['author']['imageUrl'] != null)
-                  ? messageJson['author']['imageUrl'] as String
-                  : null,
-            ),
-            createdAt:
-                DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt'])
-                    .millisecondsSinceEpoch,
-            //  createdAt: DateTime.fromMillisecondsSinceEpoch(
-            //     messageJson['createdAt'] as int)
-            // .millisecondsSinceEpoch,
-            id: messageJson['id'] as String,
-            text: messageJson['text'] as String,
-          );
-        }).toList();
+    if (messagesJson.isNotEmpty) {
+      final List<types.Message> messages = messagesJson.map((json) {
+        final messageJson = json as Map<String, dynamic>;
 
-        setState(() {
-          //_messages = messages;
-          _messages = messages.reversed.toList();
-        });
-      } else {
-        // Handle empty messages
-      }
+        // Tentukan jenis pesan berdasarkan 'type'
+        switch (messageJson['type']) {
+          case 'text':
+            return types.TextMessage(
+              author: types.User(
+                id: messageJson['author']['id'] as String,
+                firstName: "${messageJson['author']['firstName'] as String}" +
+                    " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
+                    " ${messageJson['author']['imageUrl']}",
+                imageUrl: (messageJson['author']['imageUrl'] != '' &&
+                        messageJson['author']['imageUrl'] != null)
+                    ? messageJson['author']['imageUrl'] as String
+                    : null,
+              ),
+              createdAt: DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch,
+              id: messageJson['id'] as String,
+              text: messageJson['text'] as String,
+            );
+          case 'image':
+            return types.ImageMessage(
+              author: types.User(
+                id: messageJson['author']['id'] as String,
+                firstName: "${messageJson['author']['firstName'] as String}" +
+                    " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
+                    " ${messageJson['author']['imageUrl']}",
+                imageUrl: (messageJson['author']['imageUrl'] != '' &&
+                        messageJson['author']['imageUrl'] != null)
+                    ? messageJson['author']['imageUrl'] as String
+                    : null,
+              ),
+              createdAt: DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch,
+              id: messageJson['id'] as String,
+              name: messageJson['name'] as String,
+              uri: messageJson['uri'] as String,
+              size: messageJson['size'] as int,
+              width: messageJson['width'] as double,
+              height: messageJson['height'] as double,
+            );
+          case 'file':
+            return types.FileMessage(
+              author: types.User(
+                id: messageJson['author']['id'] as String,
+                firstName: "${messageJson['author']['firstName'] as String}" +
+                    " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
+                    " ${messageJson['author']['imageUrl']}",
+                imageUrl: (messageJson['author']['imageUrl'] != '' &&
+                        messageJson['author']['imageUrl'] != null)
+                    ? messageJson['author']['imageUrl'] as String
+                    : null,
+              ),
+              createdAt: DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch,
+              id: messageJson['id'] as String,
+              name: messageJson['name'] as String,
+              uri: messageJson['uri'] as String,
+              size: messageJson['size'] as int,
+              mimeType: messageJson['mimeType'] as String,
+            );
+          default:
+            return types.TextMessage(
+              author: types.User(
+                id: messageJson['author']['id'] as String,
+                firstName: "${messageJson['author']['firstName'] as String}" +
+                    " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
+                    " ${messageJson['author']['imageUrl']}",
+                imageUrl: (messageJson['author']['imageUrl'] != '' &&
+                        messageJson['author']['imageUrl'] != null)
+                    ? messageJson['author']['imageUrl'] as String
+                    : null,
+              ),
+              createdAt: DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch,
+              id: messageJson['id'] as String,
+              text: messageJson['text'] as String,
+            );
+        }
+      }).toList();
+
+      setState(() {
+        _messages = messages.reversed.toList();
+      });
     } else {
-      throw Exception('Failed to load messages');
+      // Handle empty messages
     }
+  } else {
+    throw Exception('Failed to load messages');
   }
+}
 
   void _addMessage(types.Message message) {
     setState(() {
@@ -374,10 +437,9 @@ class _ChatPageState extends State<ChatPage> {
         body: jsonEncode(<String, dynamic>{
           'chat_id': widget.chatId,
           'author_id': _user.id,
-          'author_first_name': widget.userName, // Ganti dengan nama depan pengirim
-          'author_last_name': '', // Ganti dengan nama belakang pengirim
-          'author_image_url':
-              widget.userPhoto, // Ganti dengan URL gambar pengirim jika ada
+          'author_first_name': widget.userName,
+          'author_last_name': '',
+          'author_image_url': widget.userPhoto,
           'text': message.text,
           'type': 'text', // Jenis pesan, 'text' dalam hal ini
           'status': 'sent', // Status pesan, 'sent' berarti pesan sudah dikirim
@@ -411,6 +473,169 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  void _handleAttachmentPressed() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (BuildContext context) => SafeArea(
+        child: SizedBox(
+          height: 144,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _handleImageSelection();
+                },
+                child: const Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text('Photo'),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _handleFileSelection();
+                },
+                child: const Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text('File'),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text('Cancel'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handlePreviewDataFetched(
+    types.TextMessage message,
+    types.PreviewData previewData,
+  ) {
+    // Cari index dari message berdasarkan id
+    final index = _messages.indexWhere((element) => element.id == message.id);
+
+    // Pastikan index ditemukan
+    if (index != -1) {
+      // Pastikan elemen yang ditemukan adalah TextMessage
+      if (_messages[index] is types.TextMessage) {
+        final updatedMessage = (_messages[index] as types.TextMessage).copyWith(
+          previewData: previewData,
+        );
+
+        // Update pesan di dalam _messages
+        setState(() {
+          _messages[index] = updatedMessage;
+        });
+      } else {
+        // Log atau tangani jika tipe pesan tidak sesuai
+        print('Pesan dengan id: ${message.id} bukan TextMessage');
+      }
+    } else {
+      // Log atau tangani jika pesan tidak ditemukan
+      print('Pesan dengan id: ${message.id} tidak ditemukan');
+    }
+  }
+
+  void _handleImageSelection() async {
+    final result = await ImagePicker().pickImage(
+      imageQuality: 70,
+      maxWidth: 1440,
+      source: ImageSource.gallery,
+    );
+
+    if (result != null) {
+      final bytes = await result.readAsBytes();
+      final image = await decodeImageFromList(bytes);
+
+      final message = types.ImageMessage(
+        author: _user,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        height: image.height.toDouble(),
+        id: const Uuid().v4(),
+        name: result.name,
+        size: bytes.length,
+        uri: result.path,
+        width: image.width.toDouble(),
+      );
+
+      _addMessage(message);
+    }
+  }
+
+  void _handleFileSelection() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+    );
+
+    if (result != null && result.files.single.path != null) {
+      final message = types.FileMessage(
+        author: _user,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: const Uuid().v4(),
+        mimeType: lookupMimeType(result.files.single.path!),
+        name: result.files.single.name,
+        size: result.files.single.size,
+        uri: result.files.single.path!,
+      );
+
+      _addMessage(message);
+    }
+  }
+
+  void _handleMessageTap(BuildContext _, types.Message message) async {
+    if (message is types.FileMessage) {
+      var localPath = message.uri;
+
+      if (message.uri.startsWith('http')) {
+        try {
+          final index =
+              _messages.indexWhere((element) => element.id == message.id);
+          final updatedMessage =
+              (_messages[index] as types.FileMessage).copyWith(
+            isLoading: true,
+          );
+
+          setState(() {
+            _messages[index] = updatedMessage;
+          });
+
+          final client = http.Client();
+          final request = await client.get(Uri.parse(message.uri));
+          final bytes = request.bodyBytes;
+          final documentsDir = (await getApplicationDocumentsDirectory()).path;
+          localPath = '$documentsDir/${message.name}';
+
+          if (!File(localPath).existsSync()) {
+            final file = File(localPath);
+            await file.writeAsBytes(bytes);
+          }
+        } finally {
+          final index =
+              _messages.indexWhere((element) => element.id == message.id);
+          final updatedMessage =
+              (_messages[index] as types.FileMessage).copyWith(
+            isLoading: null,
+          );
+
+          setState(() {
+            _messages[index] = updatedMessage;
+          });
+        }
+      }
+
+      await OpenFilex.open(localPath);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
@@ -427,24 +652,27 @@ class _ChatPageState extends State<ChatPage> {
         ),
         body: Chat(
           messages: _messages,
-          onAttachmentPressed: () async {
-            final picker = ImagePicker();
-            final pickedFile =
-                await picker.pickImage(source: ImageSource.gallery);
-            if (pickedFile != null) {
-              final file = File(pickedFile.path);
-              final directory = await getApplicationDocumentsDirectory();
-              final newFile = await file.copy(
-                  '${directory.path}/${DateTime.now().millisecondsSinceEpoch}.png');
-              // Implementasi untuk mengirim file
-            }
-          },
-          onMessageTap: (context, message) {
-            // Implementasi untuk tap pesan
-          },
-          onPreviewDataFetched: (message, previewData) {
-            // Implementasi untuk preview data
-          },
+          onAttachmentPressed: _handleAttachmentPressed,
+          // onAttachmentPressed: () async {
+          //   final picker = ImagePicker();
+          //   final pickedFile =
+          //       await picker.pickImage(source: ImageSource.gallery);
+          //   if (pickedFile != null) {
+          //     final file = File(pickedFile.path);
+          //     final directory = await getApplicationDocumentsDirectory();
+          //     final newFile = await file.copy(
+          //         '${directory.path}/${DateTime.now().millisecondsSinceEpoch}.png');
+          //     // Implementasi untuk mengirim file
+          //   }
+          // },
+          onMessageTap: _handleMessageTap,
+          //onMessageTap: (context, message) {
+          // Implementasi untuk tap pesan
+          //},
+          onPreviewDataFetched: _handlePreviewDataFetched,
+          //onPreviewDataFetched: (message, previewData) {
+          // Implementasi untuk preview data
+          //},
           onSendPressed: _handleSendPressed,
           showUserAvatars: true,
           showUserNames: true,
