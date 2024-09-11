@@ -1,0 +1,90 @@
+import 'dart:convert'; // Untuk decoding JSON
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Flutter Chat App',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: ChatPage(),
+    );
+  }
+}
+
+class ChatPage extends StatefulWidget {
+  @override
+  _ChatPageState createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> {
+  List<dynamic> messages = []; // List untuk menampung pesan dari API
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMessages(); // Panggil method untuk fetch data saat halaman pertama kali dibuka
+  }
+
+  // Fungsi untuk fetch data dari API
+  Future<void> _loadMessages() async {
+    // URL API (ganti dengan URL yang sesuai)
+    final String apiUrl =
+        'https://letter-a.co.id/api/v1/chattings/get-messages.php?chat_id=chat_2';
+
+    // Lakukan request ke API
+    try {
+      final response = await http.get(Uri.parse(apiUrl));
+
+      if (response.statusCode == 200) {
+        // Decode response JSON menjadi list
+        final List<dynamic> messageData = json.decode(response.body);
+
+        // Update state untuk menampilkan data di UI
+        setState(() {
+          messages = messageData;
+        });
+      } else {
+        print('Error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching messages: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Chat Messages'),
+      ),
+      body: messages.isEmpty
+          ? Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                // Ambil data dari list
+                final message = messages[index];
+                return ListTile(
+                  title: Text(message['text'] ?? 'No Text'),
+                  subtitle: Text('From: ${message['author']['firstName']}'),
+                  trailing: Text(_formatTimestamp(message['createdAt'])),
+                );
+              },
+            ),
+    );
+  }
+
+  // Fungsi untuk format timestamp menjadi string tanggal yang mudah dibaca
+  String _formatTimestamp(int timestamp) {
+    final DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    return '${dateTime.year}-${dateTime.month}-${dateTime.day} ${dateTime.hour}:${dateTime.minute}:${dateTime.second}';
+  }
+}
