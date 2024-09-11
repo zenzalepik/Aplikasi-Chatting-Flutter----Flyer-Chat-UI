@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 // Ganti dengan URL API Anda
@@ -34,11 +35,83 @@ class ChatListPage extends StatefulWidget {
 }
 
 class _ChatListPageState extends State<ChatListPage> {
+  late Future<List<dynamic>> _chatListFuture;
+  bool _isDataFetched = false;
+
+  bool amITheFirstSender = true;
+  String myUserId = '';
+  String myUserName = '';
+  String lawanBicara = '';
+  String lawanBicaraPhoto = '';
+  String userId1 = '';
+  String userId2 = '';
+  String userName1 = '';
+  String userName2 = '';
+  String userPhoto1 = '';
+  String userPhoto2 = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // amITheFirstSender = '104';
+    //_saveDummyData();
+    _printAllSharedPreferencesData();
+    // inisiasi();
+    _chatListFuture = _fetchChatList();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isDataFetched) {
+      _isDataFetched = true;
+      inisiasi();
+    }
+  }
+
+  Future<void> inisiasi() async {
+    // Pastikan FutureBuilder selesai memuat data
+    await _chatListFuture; // Tunggu hingga Future selesai
+    await checkMyUser(); // Pastikan untuk memanggil checkMyUser di sini
+  }
+
+  // Fungsi untuk menyimpan data contoh ke SharedPreferences
+  // Future<void> _saveDummyData() async {
+  //   SharedPreferences prefs = await SharedPreferences.getInstance();
+  //   await prefs.setString('userId', '104');
+  // }
+
+  // Fungsi untuk mencetak semua data di SharedPreferences
+  Future<void> _printAllSharedPreferencesData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    Set<String> keys = prefs
+        .getKeys(); // Mendapatkan semua kunci yang ada di SharedPreferences
+
+    for (String key in keys) {
+      // Mengambil nilai berdasarkan tipe data yang sesuai
+      dynamic value = prefs.get(key);
+      print('Key: $key, Value: $value');
+    }
+  }
+
+  Future<void> checkMyUser() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String _myIdUser = prefs.getString('userId') ?? '';
+    String _myNameUser = prefs.getString('userName') ?? '';
+    setState(() {
+      myUserId = '$_myIdUser';
+      myUserName = '$_myNameUser';
+      //myUserId = '59';
+    });
+
+    print('>>My User $myUserId');
+  }
+
   Future<List<dynamic>> _fetchChatList() async {
     final response = await http.get(Uri.parse('${apiBaseUrl}chat-list.php'));
 
     if (response.statusCode == 200) {
-      // print('${jsonDecode(response.body)}');
+      print('${jsonDecode(response.body)}');
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to load chat list');
@@ -46,85 +119,162 @@ class _ChatListPageState extends State<ChatListPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chat List'),
-      ),
-      body: FutureBuilder<List<dynamic>>(
-        future: _fetchChatList(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('No chats available'));
-          }
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: Text('Chat List' + ' - $myUserId'),
+        ),
+        body: FutureBuilder<List<dynamic>>(
+          future: _chatListFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            } else if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return const Center(child: Text('No chats available'));
+            }
 
-          final chatList = snapshot.data!;
+            final chatList = snapshot.data!;
 
-          return ListView.builder(
-            itemCount: chatList.length,
-            itemBuilder: (context, index) {
-              final chat = chatList[index];
-              return ListTile(
-                title:
-                    Text(chat['chat_id']), // Sesuaikan dengan field nama chat
-                subtitle: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text('user1_name' + chat['user1_name']),
-                        )
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text('user2_name' + chat['user2_name']),
-                        )
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child:
-                              Text('last_message_id' + chat['last_message_id']),
-                        )
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                              "${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(int.parse(chat['created_at'])))}"),
-                        )
-                      ],
-                    )
-                  ],
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatPage(chatId: chat['chat_id']),
-                    ),
-                  );
-                },
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
+            return ListView.builder(
+              itemCount: chatList.length,
+              itemBuilder: (context, index) {
+                final chat = chatList[index];
+                // setState(() {
+                userId1 = chat['user_1_id'];
+                userId2 = chat['user_2_id'];
+                userName1 = chat['user1_name'];
+                userName2 = chat['user2_name'];
+                userPhoto1 = chat['user1_imageUrl'];
+                userPhoto2 = chat['user2_imageUrl'];
+                // });
+                return ListTile(
+                  leading: Image.network(
+                      myUserId == userId1
+                          ? 'https://letter-a.co.id/api/v1/${chat['user2_imageUrl']}'
+                          : myUserId == userId2
+                              ? 'https://letter-a.co.id/api/v1/${chat['user1_imageUrl']}'
+                              : 'https://letter-a.co.id/api/v1/uploads/logo.png',
+                      width: 40,
+                      height: 40),
+                  title:
+                      Text(chat['chat_id']), // Sesuaikan dengan field nama chat
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(myUserId == userId1
+                                ? chat['user2_name']
+                                : myUserId == userId2
+                                    ? chat['user1_name']
+                                    : '404'),
+                          ),
+                        ],
+                      ),
+                      Image.network(
+                          'https://letter-a.co.id/api/v1/${chat['user1_imageUrl']}',
+                          width: 40,
+                          height: 40),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text('user1_name' +
+                                chat['user1_name'] +
+                                chat['user_1_id']),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text('user2_name' +
+                                chat['user2_name'] +
+                                chat['user_2_id']),
+                          )
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                                'last_message_id' + chat['last_message_id']),
+                          )
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text((chat['updated_at'] != '' &&
+                                    chat['updated_at'] != null &&
+                                    chat['updated_at'] != 'null')
+                                ? "${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(int.parse(chat['updated_at'])))}"
+                                : "${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(int.parse(chat['created_at'])))}"),
+                          )
+                        ],
+                      ),
+                      Image.network(
+                          'https://letter-a.co.id/api/v1/${chat['user2_imageUrl']}',
+                          width: 40,
+                          height: 40),
+                    ],
+                  ),
+                  onTap: () {
+                    // setState(() {
+                    userId1 = chat['user_1_id'];
+                    userId2 = chat['user_2_id'];
+                    userName1 = chat['user1_name'];
+                    userName2 = chat['user2_name'];
+                    userPhoto1 = chat['user1_imageUrl'];
+                    userPhoto2 = chat['user2_imageUrl'];
+                    // });
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatPage(
+                          chatId: chat['chat_id'],
+                          userId: '$myUserId',
+                          userName: '$myUserName',
+                          lawanBicara: myUserId == userId1
+                              ? chat['user2_name']
+                              : myUserId == userId2
+                                  ? chat['user1_name']
+                                  : '404',
+
+                          //: '404'
+
+                          lawanBicaraPhoto: myUserId == userId1
+                              ? chat['user2_imageUrl']
+                              : myUserId == userId2
+                                  ? chat['user1_imageUrl']
+                                  : '404',
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+      );
 }
 
 class ChatPage extends StatefulWidget {
   final String chatId;
-  const ChatPage({required this.chatId, super.key});
+  final String userId;
+  final String userName;
+  final String lawanBicara;
+  final String lawanBicaraPhoto;
+  ChatPage({
+    required this.chatId,
+    required this.userId,
+    required this.userName,
+    required this.lawanBicara,
+    required this.lawanBicaraPhoto,
+    super.key,
+  });
 
   @override
   _ChatPageState createState() => _ChatPageState();
@@ -132,16 +282,24 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   List<types.Message> _messages = [];
-  // String idUserLawanBicara = '';
-  final _user = const types.User(
-    id: '59',
-  );
+  late types.User _user;
   // late types.User _user; // Menggunakan late untuk menunda inisialisasi
 
   @override
   void initState() {
     super.initState();
-    _loadMessages();
+    inisiasi();
+  }
+
+  Future<void> inisiasi() async {
+    await setUser();
+    await _loadMessages();
+  }
+
+  Future<void> setUser() async {
+    _user = types.User(
+      id: '${widget.userId}',
+    );
   }
 
   Future<void> _loadMessages() async {
@@ -216,10 +374,10 @@ class _ChatPageState extends State<ChatPage> {
         body: jsonEncode(<String, dynamic>{
           'chat_id': widget.chatId,
           'author_id': _user.id,
-          'author_first_name': 'User', // Ganti dengan nama depan pengirim
+          'author_first_name': widget.userName, // Ganti dengan nama depan pengirim
           'author_last_name': '', // Ganti dengan nama belakang pengirim
           'author_image_url':
-              'https://zenzalepik.github.io/Zalepik_Images/artikel/tumbnail/zalepik_thumbnail_cara%20membuat%20routing%20di%20react.png', // Ganti dengan URL gambar pengirim jika ada
+              widget.userPhoto, // Ganti dengan URL gambar pengirim jika ada
           'text': message.text,
           'type': 'text', // Jenis pesan, 'text' dalam hal ini
           'status': 'sent', // Status pesan, 'sent' berarti pesan sudah dikirim
@@ -256,7 +414,16 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('Chat'),
+          title: Text('${widget.lawanBicara}'),
+          //title: Text('Chat ${widget.lawanBicara} ${widget.userId}'),
+          actions: [
+            Image.network(
+                widget.lawanBicaraPhoto != '404'
+                    ? 'https://letter-a.co.id/api/v1/${widget.lawanBicaraPhoto}'
+                    : 'https://cdn.pixabay.com/photo/2021/10/11/00/59/warning-6699085_1280.png',
+                height: 24,
+                width: 24)
+          ],
         ),
         body: Chat(
           messages: _messages,
