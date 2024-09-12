@@ -770,19 +770,24 @@ class _ChatPageState extends State<ChatPage> {
     if (message is types.FileMessage) {
       var localPath = message.uri;
 
+      // Konversi message.uri menjadi Uri
+      final uri = Uri.parse(message.uri);
+
       // Jika URI adalah URL, buka di browser
       if (message.uri.startsWith('http')) {
         try {
           final index =
               _messages.indexWhere((element) => element.id == message.id);
+
+          // Pastikan isLoading adalah parameter yang valid
           final updatedMessage =
               (_messages[index] as types.FileMessage).copyWith(
-            isLoading: true,
+            isLoading: true, // Sesuaikan jika isLoading tidak ada
           );
 
           final updatedStopMessage =
               (_messages[index] as types.FileMessage).copyWith(
-            isLoading: false,
+            isLoading: false, // Sesuaikan jika isLoading tidak ada
           );
 
           setState(() {
@@ -790,7 +795,7 @@ class _ChatPageState extends State<ChatPage> {
           });
 
           // Jika URL adalah link file, unduh file dan simpan ke penyimpanan lokal
-          final response = await http.get(Uri.parse(message.uri));
+          final response = await http.get(uri);
           final bytes = response.bodyBytes;
           final documentsDir = (await getApplicationDocumentsDirectory()).path;
           localPath = '$documentsDir/${message.name}';
@@ -810,9 +815,10 @@ class _ChatPageState extends State<ChatPage> {
         } catch (e) {
           // Jika terjadi error
           print('Error opening file: $e');
+
           // Jika tidak bisa membuka file lokal, coba buka di browser
-          if (await canLaunchUrl(message.uri as Uri)) {
-            await launchUrl(message.uri as Uri);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri);
           } else {
             throw 'Could not launch ${message.uri}';
           }
