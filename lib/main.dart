@@ -1005,6 +1005,25 @@ class _ChatPageState extends State<ChatPage> {
                 child: CircularProgressIndicator(),
               )
             : Chat(
+                theme: DefaultChatTheme(
+                  //inputBackgroundColor: Colors.red,
+                  // inputSurfaceTintColor: Colors.purple,
+                  primaryColor: Colors.green,
+                  sendButtonIcon: Container(
+                    padding: EdgeInsets.fromLTRB(8, 6, 4, 6),
+                    decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(16)),
+                    child: Icon(
+                      Icons.send, // Icon pesawat untuk tombol kirim
+                      color: Colors.white, // Warna ikon
+                      size: 28, // Ukuran ikon
+                    ),
+                  ),
+                  inputPadding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 12), // Padding pada kotak input teks
+                ),
                 messages: _messages,
                 onAttachmentPressed: _handleAttachmentPressed,
                 // onAttachmentPressed: () async {
