@@ -297,7 +297,8 @@ class _ChatPageState extends State<ChatPage> {
   List<types.Message> _messages = [];
   late types.User _user;
   // late types.User _user; // Menggunakan late untuk menunda inisialisasi
-
+  bool _isLoading = true; // Mulai dengan true jika data sedang dimuat
+  bool _isChatEmpty = false;
   @override
   void initState() {
     super.initState();
@@ -323,6 +324,10 @@ class _ChatPageState extends State<ChatPage> {
     if (response.statusCode == 200) {
       final List<dynamic> messagesJson = jsonDecode(response.body);
       print("${jsonDecode(response.body)}");
+
+      setState(() {
+        _isLoading = false;
+      });
 
       if (messagesJson.isNotEmpty) {
         final List<types.Message> messages = messagesJson.map((json) {
@@ -569,6 +574,20 @@ class _ChatPageState extends State<ChatPage> {
 
     if (result != null) {
       final bytes = await result.readAsBytes();
+
+      // Cek ukuran file
+      final fileSizeMB = bytes.length / (1024 * 1024); // Konversi byte ke MB
+      if (fileSizeMB > 25) {
+        // Ukuran file lebih dari 25 MB
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('File size exceeds the 25MB limit.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return; // Keluar dari fungsi jika ukuran file terlalu besar
+      }
+
       final image = await decodeImageFromList(bytes);
       final fileExtension = result.name.split('.').last.toLowerCase();
       final mediaType = _getMediaType(fileExtension);
@@ -640,6 +659,12 @@ class _ChatPageState extends State<ChatPage> {
           _addMessage(_message);
         } else {
           print('Error sending message: ${jsonResponse['message']}');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(jsonResponse['message']),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       } else {
         print('Failed to send message: ${response.statusCode}');
@@ -671,6 +696,19 @@ class _ChatPageState extends State<ChatPage> {
       if (result != null && result.files.single.path != null) {
         final file = result.files.single;
         final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+
+// Cek ukuran file
+        final fileSizeMB = bytes.length / (1024 * 1024); // Konversi byte ke MB
+        if (fileSizeMB > 25) {
+          // Ukuran file lebih dari 25 MB
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('File size exceeds the 25MB limit.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return; // Keluar dari fungsi jika ukuran file terlalu besar
+        }
 
         // Mendapatkan ekstensi file dan menentukan tipe MIME
         final fileExtension = file.extension?.toLowerCase() ?? '';
@@ -723,8 +761,22 @@ class _ChatPageState extends State<ChatPage> {
           if (jsonResponse['status'] == 'success') {
             print('Message sent successfully: ${jsonResponse['data']['id']}');
             _addMessage(messageFile);
+          } else if (jsonResponse['status'] == 'error') {
+            print('Message sent successfully: ${jsonResponse['message']}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(jsonResponse['message']),
+                backgroundColor: Colors.red,
+              ),
+            );
           } else {
             print('Error sending message: ${jsonResponse['message']}');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(jsonResponse['message']),
+                backgroundColor: Colors.red,
+              ),
+            );
           }
         } else {
           print('Failed to send message: ${response.statusCode}');
@@ -744,28 +796,6 @@ class _ChatPageState extends State<ChatPage> {
     return MediaType(type, subtype);
   }
 
-/*
-  void _handleFileSelection() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-    );
-
-    if (result != null && result.files.single.path != null) {
-      final message = types.FileMessage(
-        author: _user,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        id: const Uuid().v4(),
-        mimeType: lookupMimeType(result.files.single.path!),
-        name: result.files.single.name,
-        size: result.files.single.size,
-        uri: result.files.single.path!,
-      );
-
-      _addMessage(message);
-    }
-  }
-*/
-
   void _handleMessageTap(BuildContext context, types.Message message) async {
     if (message is types.FileMessage) {
       var localPath = message.uri;
@@ -782,16 +812,26 @@ class _ChatPageState extends State<ChatPage> {
           // Pastikan isLoading adalah parameter yang valid
           final updatedMessage =
               (_messages[index] as types.FileMessage).copyWith(
-            isLoading: true, // Sesuaikan jika isLoading tidak ada
+            isLoading: false,
           );
 
           final updatedStopMessage =
               (_messages[index] as types.FileMessage).copyWith(
-            isLoading: false, // Sesuaikan jika isLoading tidak ada
+            isLoading: true,
           );
 
           setState(() {
             _messages[index] = updatedMessage;
+          });
+
+          // Menunda pengaturan isLoading ke false setelah 3 detik
+          Future.delayed(Duration(seconds: 15), () {
+            setState(() {
+              _messages[index] =
+                  (_messages[index] as types.FileMessage).copyWith(
+                isLoading: false,
+              );
+            });
           });
 
           // Jika URL adalah link file, unduh file dan simpan ke penyimpanan lokal
@@ -802,13 +842,14 @@ class _ChatPageState extends State<ChatPage> {
 
           if (!File(localPath).existsSync()) {
             final file = File(localPath);
+            setState(() {
+              _messages[index] =
+                  (_messages[index] as types.FileMessage).copyWith(
+                isLoading: false,
+              );
+            });
             await file.writeAsBytes(bytes);
           }
-
-          // Update status message
-          setState(() {
-            _messages[index] = updatedStopMessage;
-          });
 
           // Buka file lokal
           await OpenFilex.open(localPath);
@@ -844,33 +885,37 @@ class _ChatPageState extends State<ChatPage> {
                 width: 24)
           ],
         ),
-        body: Chat(
-          messages: _messages,
-          onAttachmentPressed: _handleAttachmentPressed,
-          // onAttachmentPressed: () async {
-          //   final picker = ImagePicker();
-          //   final pickedFile =
-          //       await picker.pickImage(source: ImageSource.gallery);
-          //   if (pickedFile != null) {
-          //     final file = File(pickedFile.path);
-          //     final directory = await getApplicationDocumentsDirectory();
-          //     final newFile = await file.copy(
-          //         '${directory.path}/${DateTime.now().millisecondsSinceEpoch}.png');
-          //     // Implementasi untuk mengirim file
-          //   }
-          // },
-          onMessageTap: _handleMessageTap,
-          //onMessageTap: (context, message) {
-          // Implementasi untuk tap pesan
-          //},
-          onPreviewDataFetched: _handlePreviewDataFetched,
-          //onPreviewDataFetched: (message, previewData) {
-          // Implementasi untuk preview data
-          //},
-          onSendPressed: _handleSendPressed,
-          showUserAvatars: true,
-          showUserNames: true,
-          user: _user,
-        ),
+        body: _isLoading == true
+            ? Center(
+                child: CircularProgressIndicator(),
+              )
+            : Chat(
+                messages: _messages,
+                onAttachmentPressed: _handleAttachmentPressed,
+                // onAttachmentPressed: () async {
+                //   final picker = ImagePicker();
+                //   final pickedFile =
+                //       await picker.pickImage(source: ImageSource.gallery);
+                //   if (pickedFile != null) {
+                //     final file = File(pickedFile.path);
+                //     final directory = await getApplicationDocumentsDirectory();
+                //     final newFile = await file.copy(
+                //         '${directory.path}/${DateTime.now().millisecondsSinceEpoch}.png');
+                //     // Implementasi untuk mengirim file
+                //   }
+                // },
+                onMessageTap: _handleMessageTap,
+                //onMessageTap: (context, message) {
+                // Implementasi untuk tap pesan
+                //},
+                onPreviewDataFetched: _handlePreviewDataFetched,
+                //onPreviewDataFetched: (message, previewData) {
+                // Implementasi untuk preview data
+                //},
+                onSendPressed: _handleSendPressed,
+                showUserAvatars: true,
+                showUserNames: true,
+                user: _user,
+              ),
       );
 }
