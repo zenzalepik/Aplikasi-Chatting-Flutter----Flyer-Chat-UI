@@ -1,0 +1,19 @@
+{
+  "author": {
+    "firstName": "Admin",
+    "id": "104",
+    "lastName": "",
+    "imageUrl": "uploads/logo.png"
+  },
+  "createdAt": 1726119291677,
+  "id": "msg_66e27d7e526d49.28641360",
+  "status": "sent",
+  "type": "image",
+  "uri": "uploads/logo.png",
+  "name": "img_logo_vertical_color.png",
+  "size": 85177,
+  "mimeType": "image/png",
+  "width": 1080,
+  "height": 1180,
+  "image": []
+}

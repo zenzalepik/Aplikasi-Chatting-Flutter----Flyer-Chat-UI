@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:mime/mime.dart';
@@ -78,11 +79,12 @@ class _ChatListPageState extends State<ChatListPage> {
     await checkMyUser(); // Pastikan untuk memanggil checkMyUser di sini
   }
 
-  // Fungsi untuk menyimpan data contoh ke SharedPreferences
-  // Future<void> _saveDummyData() async {
-  //   SharedPreferences prefs = await SharedPreferences.getInstance();
-  //   await prefs.setString('userId', '104');
-  // }
+  //Fungsi untuk menyimpan data contoh ke SharedPreferences
+  Future<void> _saveDummyData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userId', '104');
+    await prefs.setString('userName', 'Admin');
+  }
 
   // Fungsi untuk mencetak semua data di SharedPreferences
   Future<void> _printAllSharedPreferencesData() async {
@@ -313,104 +315,114 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _loadMessages() async {
-  final response = await http.get(
-    Uri.parse('${apiBaseUrl}get-messages.php?chat_id=${widget.chatId}'),
-  );
+    final response = await http.get(
+      Uri.parse('${apiBaseUrl}get-messages.php?chat_id=${widget.chatId}'),
+    );
 
-  if (response.statusCode == 200) {
-    final List<dynamic> messagesJson = jsonDecode(response.body);
-    print("${jsonDecode(response.body)}");
+    if (response.statusCode == 200) {
+      final List<dynamic> messagesJson = jsonDecode(response.body);
+      print("${jsonDecode(response.body)}");
 
-    if (messagesJson.isNotEmpty) {
-      final List<types.Message> messages = messagesJson.map((json) {
-        final messageJson = json as Map<String, dynamic>;
+      if (messagesJson.isNotEmpty) {
+        final List<types.Message> messages = messagesJson.map((json) {
+          final messageJson = json as Map<String, dynamic>;
 
-        // Tentukan jenis pesan berdasarkan 'type'
-        switch (messageJson['type']) {
-          case 'text':
-            return types.TextMessage(
-              author: types.User(
-                id: messageJson['author']['id'] as String,
-                firstName: "${messageJson['author']['firstName'] as String}" +
-                    " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
-                    " ${messageJson['author']['imageUrl']}",
-                imageUrl: (messageJson['author']['imageUrl'] != '' &&
-                        messageJson['author']['imageUrl'] != null)
-                    ? messageJson['author']['imageUrl'] as String
-                    : null,
-              ),
-              createdAt: DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch,
-              id: messageJson['id'] as String,
-              text: messageJson['text'] as String,
-            );
-          case 'image':
-            return types.ImageMessage(
-              author: types.User(
-                id: messageJson['author']['id'] as String,
-                firstName: "${messageJson['author']['firstName'] as String}" +
-                    " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
-                    " ${messageJson['author']['imageUrl']}",
-                imageUrl: (messageJson['author']['imageUrl'] != '' &&
-                        messageJson['author']['imageUrl'] != null)
-                    ? messageJson['author']['imageUrl'] as String
-                    : null,
-              ),
-              createdAt: DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch,
-              id: messageJson['id'] as String,
-              name: messageJson['name'] as String,
-              uri: messageJson['uri'] as String,
-              size: messageJson['size'] as int,
-              width: messageJson['width'] as double,
-              height: messageJson['height'] as double,
-            );
-          case 'file':
-            return types.FileMessage(
-              author: types.User(
-                id: messageJson['author']['id'] as String,
-                firstName: "${messageJson['author']['firstName'] as String}" +
-                    " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
-                    " ${messageJson['author']['imageUrl']}",
-                imageUrl: (messageJson['author']['imageUrl'] != '' &&
-                        messageJson['author']['imageUrl'] != null)
-                    ? messageJson['author']['imageUrl'] as String
-                    : null,
-              ),
-              createdAt: DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch,
-              id: messageJson['id'] as String,
-              name: messageJson['name'] as String,
-              uri: messageJson['uri'] as String,
-              size: messageJson['size'] as int,
-              mimeType: messageJson['mimeType'] as String,
-            );
-          default:
-            return types.TextMessage(
-              author: types.User(
-                id: messageJson['author']['id'] as String,
-                firstName: "${messageJson['author']['firstName'] as String}" +
-                    " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
-                    " ${messageJson['author']['imageUrl']}",
-                imageUrl: (messageJson['author']['imageUrl'] != '' &&
-                        messageJson['author']['imageUrl'] != null)
-                    ? messageJson['author']['imageUrl'] as String
-                    : null,
-              ),
-              createdAt: DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch,
-              id: messageJson['id'] as String,
-              text: messageJson['text'] as String,
-            );
-        }
-      }).toList();
+          // Tentukan jenis pesan berdasarkan 'type'
+          switch (messageJson['type']) {
+            case 'text':
+              return types.TextMessage(
+                author: types.User(
+                  id: messageJson['author']['id'] as String,
+                  firstName: "${messageJson['author']['firstName'] as String}" +
+                      " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
+                      " ${messageJson['author']['imageUrl']}",
+                  imageUrl: (messageJson['author']['imageUrl'] != '' &&
+                          messageJson['author']['imageUrl'] != null)
+                      ? messageJson['author']['imageUrl'] as String
+                      : null,
+                ),
+                createdAt: DateTime.fromMillisecondsSinceEpoch(
+                        messageJson['createdAt'])
+                    .millisecondsSinceEpoch,
+                id: messageJson['id'] as String,
+                text: messageJson['text'] as String,
+              );
+            case 'image':
+              return types.ImageMessage(
+                author: types.User(
+                  id: messageJson['author']['id'] as String,
+                  firstName: "${messageJson['author']['firstName'] as String}" +
+                      " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
+                      " ${messageJson['author']['imageUrl']}",
+                  imageUrl: (messageJson['author']['imageUrl'] != '' &&
+                          messageJson['author']['imageUrl'] != null)
+                      ? messageJson['author']['imageUrl'] as String
+                      : null,
+                ),
+                createdAt: DateTime.fromMillisecondsSinceEpoch(
+                        messageJson['createdAt'])
+                    .millisecondsSinceEpoch,
+                id: messageJson['id'] as String,
+                name: messageJson['name'] as String,
+                uri: 'https://letter-a.co.id/api/v1/chattings/' +
+                    '${messageJson['uri'] as String}',
+                size: int.parse('${messageJson['size']}'),
+                width: double.parse('${messageJson['width']}'),
+                height: double.parse('${messageJson['height']}'),
+              );
+            case 'file':
+              return types.FileMessage(
+                author: types.User(
+                  id: messageJson['author']['id'] as String,
+                  firstName: "${messageJson['author']['firstName'] as String}" +
+                      " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
+                      " ${messageJson['author']['imageUrl']}",
+                  imageUrl: (messageJson['author']['imageUrl'] != '' &&
+                          messageJson['author']['imageUrl'] != null)
+                      ? messageJson['author']['imageUrl'] as String
+                      : null,
+                ),
+                createdAt: DateTime.fromMillisecondsSinceEpoch(
+                        messageJson['createdAt'])
+                    .millisecondsSinceEpoch,
+                id: messageJson['id'] as String,
+                name: messageJson['name'] as String,
+                uri: 'https:letter-a.co.id/api/v1/chattings/' +
+                    '${messageJson['uri'] as String}',
+                size: messageJson['size'] as int,
+                mimeType: messageJson['mimeType'] as String,
+              );
+            default:
+              return types.TextMessage(
+                author: types.User(
+                  id: messageJson['author']['id'] as String,
+                  firstName: "${messageJson['author']['firstName'] as String}" +
+                      " - ${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(DateTime.fromMillisecondsSinceEpoch(messageJson['createdAt']).millisecondsSinceEpoch))}" +
+                      " ${messageJson['author']['imageUrl']}",
+                  imageUrl: (messageJson['author']['imageUrl'] != '' &&
+                          messageJson['author']['imageUrl'] != null)
+                      ? messageJson['author']['imageUrl'] as String
+                      : null,
+                ),
+                createdAt: DateTime.fromMillisecondsSinceEpoch(
+                        messageJson['createdAt'])
+                    .millisecondsSinceEpoch,
+                id: messageJson['id'] as String,
+                text: messageJson['text'] as String,
+              );
+          }
+        }).toList();
 
-      setState(() {
-        _messages = messages.reversed.toList();
-      });
+        setState(() {
+          _messages = messages.reversed.toList();
+        });
+      } else {
+        // Handle empty messages
+      }
     } else {
-      // Handle empty messages
+      throw Exception('Failed to load messages');
     }
-  } else {
-    throw Exception('Failed to load messages');
   }
-}
 
   void _addMessage(types.Message message) {
     setState(() {
@@ -546,6 +558,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _handleImageSelection() async {
+    print("==> ${widget.chatId}");
     final result = await ImagePicker().pickImage(
       imageQuality: 70,
       maxWidth: 1440,
@@ -555,19 +568,93 @@ class _ChatPageState extends State<ChatPage> {
     if (result != null) {
       final bytes = await result.readAsBytes();
       final image = await decodeImageFromList(bytes);
+      final fileExtension = result.name.split('.').last.toLowerCase();
+      final mediaType = _getMediaType(fileExtension);
+      final uri = Uri.parse('${apiBaseUrl}send-message-image.php');
+      final request = http.MultipartRequest('POST', uri);
 
-      final message = types.ImageMessage(
-        author: _user,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        height: image.height.toDouble(),
-        id: const Uuid().v4(),
-        name: result.name,
-        size: bytes.length,
-        uri: result.path,
-        width: image.width.toDouble(),
+      request.fields['chat_id'] = '${widget.chatId}';
+      request.fields['author_id'] = '${_user.id}';
+      request.fields['author_first_name'] = '${widget.userName}';
+      request.fields['author_last_name'] = '';
+      request.fields['imageUrl'] = '${widget.userPhoto}';
+      request.fields['type'] = 'image';
+      request.fields['status'] = 'sent';
+      request.fields['created_at'] =
+          DateTime.now().millisecondsSinceEpoch.toString();
+      request.fields['name'] = '${result.name}';
+      //  request.fields['name'] =
+      // '${DateTime.now().millisecondsSinceEpoch}' + '${result.name}';
+      request.fields['size'] = bytes.length.toString();
+      request.fields['mime_type'] =
+          mediaType.toString(); // Tipe MIME dari file gambar
+      request.fields['width'] = image.width.toString();
+      request.fields['height'] = image.height.toString();
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename: result.name,
+          contentType: mediaType,
+        ),
       );
 
-      _addMessage(message);
+      // Membuat pesan gambar
+      final _message = types.ImageMessage(
+        author: _user, // Data user pengirim
+        createdAt: DateTime.now().millisecondsSinceEpoch, // Waktu pesan dibuat
+        id: const Uuid().v4(), // ID unik untuk pesan
+        //mimeType: mediaType, // Tipe MIME gambar
+        name: result.name, // Nama file gambar
+        size: bytes.length, // Ukuran file dalam byte
+        uri: result.path, // Lokasi file gambar
+        width: null, // Anda bisa menambahkan lebar gambar jika ingin
+        height: null, // Anda bisa menambahkan tinggi gambar jika ingin
+      );
+
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        print('chat_id: ${widget.chatId}');
+        print('author_id: ${_user.id}');
+        print('author_first_name: ${widget.userName}');
+        print('author_last_name: ');
+        print('imageUrl: ${widget.userPhoto}');
+        print('type: image');
+        print('status: sent');
+        print('created_at: ${DateTime.now().millisecondsSinceEpoch}');
+        print('name: ${result.name}');
+        print('size: ${bytes.length}');
+        print('mime_type: ${mediaType.toString()}');
+        print('width: ${image.width}');
+        print('height: ${image.height}');
+
+        final responseBody = await response.stream.bytesToString();
+        final jsonResponse = json.decode(responseBody);
+
+        if (jsonResponse['status'] == 'success') {
+          print('Message sent successfully: ${jsonResponse['data']['id']}');
+          _addMessage(_message);
+        } else {
+          print('Error sending message: ${jsonResponse['message']}');
+        }
+      } else {
+        print('Failed to send message: ${response.statusCode}');
+      }
+    }
+  }
+
+// Menentukan tipe MIME berdasarkan ekstensi file
+  MediaType _getMediaType(String extension) {
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      case 'png':
+        return MediaType('image', 'png');
+      default:
+        return MediaType('application', 'octet-stream'); // Default fallback
     }
   }
 
