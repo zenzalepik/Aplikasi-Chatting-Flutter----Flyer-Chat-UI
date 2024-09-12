@@ -59,10 +59,9 @@ class _ChatListPageState extends State<ChatListPage> {
   void initState() {
     super.initState();
     // amITheFirstSender = '104';
-    //_saveDummyData();
-    _printAllSharedPreferencesData();
-    // inisiasi();
-    _chatListFuture = _fetchChatList();
+    //_saveDummyData();inisiasi();
+    //_chatListFuture = _fetchChatList();
+    inisiasi();
   }
 
   @override
@@ -70,14 +69,16 @@ class _ChatListPageState extends State<ChatListPage> {
     super.didChangeDependencies();
     if (!_isDataFetched) {
       _isDataFetched = true;
-      inisiasi();
+      //inisiasi();
     }
   }
 
   Future<void> inisiasi() async {
     // Pastikan FutureBuilder selesai memuat data
-    await _chatListFuture; // Tunggu hingga Future selesai
     await checkMyUser(); // Pastikan untuk memanggil checkMyUser di sini
+    _chatListFuture = _fetchChatList();
+    await _chatListFuture; // Tunggu hingga Future selesai
+    _printAllSharedPreferencesData();
   }
 
   //Fungsi untuk menyimpan data contoh ke SharedPreferences
@@ -114,13 +115,51 @@ class _ChatListPageState extends State<ChatListPage> {
   }
 
   Future<List<dynamic>> _fetchChatList() async {
-    final response = await http.get(Uri.parse('${apiBaseUrl}chat-list.php'));
+    final response = await http
+        .get(Uri.parse('${apiBaseUrl}chat-list.php?myIdUser=${myUserId}'));
 
-    if (response.statusCode == 200) {
+    final jsonResponseError = jsonDecode(response.body);
+    print('${jsonResponseError}');
+    //print('${jsonResponseError['status']}');
+    // if (jsonResponseError['status'] == 'error') {
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     SnackBar(
+    //       content: Text(jsonResponseError['message']),
+    //       backgroundColor: Colors.red,
+    //     ),
+    //   );
+    // }
+    print('myUserId $myUserId');
+    if (response.statusCode == 200 &&
+        jsonResponseError['status'] == 'success') {
       print('${jsonDecode(response.body)}');
-      return jsonDecode(response.body);
+      return jsonDecode(response.body)['data'];
     } else {
+      if (jsonResponseError['status'] == 'error') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(jsonResponseError['message']),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       throw Exception('Failed to load chat list');
+    }
+  }
+
+  String _isToday(String timestamp) {
+    final date = DateTime.fromMillisecondsSinceEpoch(int.parse(timestamp));
+
+    // Ambil tanggal hari ini
+    final today = DateTime.now();
+
+    // Cek apakah tanggal dari API sama dengan hari ini
+    if (date.year == today.year &&
+        date.month == today.month &&
+        date.day == today.day) {
+      return 'Hari Ini';
+    } else {
+      return DateFormat('dd-MM-yyyy').format(date);
     }
   }
 
@@ -135,7 +174,8 @@ class _ChatListPageState extends State<ChatListPage> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             } else if (snapshot.hasError) {
-              return Center(child: Text('Error: ${snapshot.error}'));
+              return Center(child: Text('Error: Can not load chats page'));
+              //return Center(child: Text('Error: ${snapshot.error}'));
             } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return const Center(child: Text('No chats available'));
             }
@@ -212,11 +252,32 @@ class _ChatListPageState extends State<ChatListPage> {
                       Row(
                         children: [
                           Expanded(
+                            child: Text('last_message' +
+                                '${chat['last_message'] ?? ''}'),
+                          )
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              (chat['updated_at'] != '' &&
+                                      chat['updated_at'] != null &&
+                                      chat['updated_at'] != 'null')
+                                  ? _isToday(chat['updated_at'])
+                                  : _isToday(chat['created_at']),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
                             child: Text((chat['updated_at'] != '' &&
                                     chat['updated_at'] != null &&
                                     chat['updated_at'] != 'null')
-                                ? "${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(int.parse(chat['updated_at'])))}"
-                                : "${DateFormat('dd-MM-yyyy - HH:mm').format(DateTime.fromMillisecondsSinceEpoch(int.parse(chat['created_at'])))}"),
+                                ? "${DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(int.parse(chat['updated_at'])))}"
+                                : "${DateFormat('HH:mm').format(DateTime.fromMillisecondsSinceEpoch(int.parse(chat['created_at'])))}"),
                           )
                         ],
                       ),
@@ -323,7 +384,7 @@ class _ChatPageState extends State<ChatPage> {
 
     if (response.statusCode == 200) {
       final List<dynamic> messagesJson = jsonDecode(response.body);
-      print("${jsonDecode(response.body)}");
+      //print("${messagesJson[0]}");
 
       setState(() {
         _isLoading = false;
@@ -424,8 +485,20 @@ class _ChatPageState extends State<ChatPage> {
         });
       } else {
         // Handle empty messages
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Something's error"),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Something's error"),
+          backgroundColor: Colors.red,
+        ),
+      );
       throw Exception('Failed to load messages');
     }
   }
@@ -479,12 +552,30 @@ class _ChatPageState extends State<ChatPage> {
         if (responseBody['status'] == 'success') {
           print('Message sent successfully: ${responseBody['data']['id']}');
         } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Something's error"),
+              backgroundColor: Colors.red,
+            ),
+          );
           throw Exception('Failed to send message: ${responseBody['message']}');
         }
       } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Something's error"),
+            backgroundColor: Colors.red,
+          ),
+        );
         throw Exception('Failed to send message');
       }
     } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Something's error"),
+          backgroundColor: Colors.red,
+        ),
+      );
       // Tangani kesalahan pengiriman pesan di sini
       print('Error sending message: $e');
       // Tampilkan pesan kesalahan kepada pengguna jika diperlukan
@@ -667,6 +758,12 @@ class _ChatPageState extends State<ChatPage> {
           );
         }
       } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Something's error"),
+            backgroundColor: Colors.red,
+          ),
+        );
         print('Failed to send message: ${response.statusCode}');
       }
     }
@@ -779,12 +876,30 @@ class _ChatPageState extends State<ChatPage> {
             );
           }
         } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Something's error"),
+              backgroundColor: Colors.red,
+            ),
+          );
           print('Failed to send message: ${response.statusCode}');
         }
       } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Something's error"),
+            backgroundColor: Colors.red,
+          ),
+        );
         print('No file selected or invalid file path.');
       }
     } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Something's error"),
+          backgroundColor: Colors.red,
+        ),
+      );
       print('Error selecting file: $e');
     }
   }
