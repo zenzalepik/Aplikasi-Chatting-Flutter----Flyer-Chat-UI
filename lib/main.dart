@@ -13,6 +13,7 @@ import 'package:mime/mime.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 // Ganti dengan URL API Anda
@@ -532,6 +533,7 @@ class _ChatPageState extends State<ChatPage> {
     types.TextMessage message,
     types.PreviewData previewData,
   ) {
+    //print('lihat gambar');
     // Cari index dari message berdasarkan id
     final index = _messages.indexWhere((element) => element.id == message.id);
 
@@ -659,6 +661,91 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _handleFileSelection() async {
+    try {
+      // Ambil file yang dipilih pengguna
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+      );
+
+      // Cek apakah file dipilih dan path file tidak null
+      if (result != null && result.files.single.path != null) {
+        final file = result.files.single;
+        final bytes = file.bytes ?? await File(file.path!).readAsBytes();
+
+        // Mendapatkan ekstensi file dan menentukan tipe MIME
+        final fileExtension = file.extension?.toLowerCase() ?? '';
+        final mediaType = _getMediaFileType(file.path!);
+        final uri = Uri.parse('${apiBaseUrl}send-message-file.php');
+        final request = http.MultipartRequest('POST', uri);
+
+        // Menambahkan fields yang dibutuhkan ke dalam request
+        request.fields['chat_id'] = '${widget.chatId}';
+        request.fields['author_id'] = '${_user.id}';
+        request.fields['author_first_name'] = '${widget.userName}';
+        request.fields['author_last_name'] = '';
+        request.fields['imageUrl'] = '${widget.userPhoto}';
+        request.fields['type'] = 'file';
+        request.fields['status'] = 'sent';
+        request.fields['created_at'] =
+            DateTime.now().millisecondsSinceEpoch.toString();
+        request.fields['name'] = file.name;
+        request.fields['size'] = bytes.length.toString();
+        request.fields['mime_type'] = mediaType.toString();
+
+        // Menambahkan file ke dalam request sebagai multipart
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            bytes,
+            filename: file.name,
+            contentType: mediaType,
+          ),
+        );
+
+        // Mengirim pesan lokal sementara
+        final messageFile = types.FileMessage(
+          author: _user,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          id: const Uuid().v4(),
+          mimeType: lookupMimeType(file.path!) ?? 'application/octet-stream',
+          name: file.name,
+          size: file.size,
+          uri: file.path!,
+        );
+
+        // Mengirim request
+        final response = await request.send();
+
+        if (response.statusCode == 200) {
+          final responseBody = await response.stream.bytesToString();
+          final jsonResponse = json.decode(responseBody);
+
+          if (jsonResponse['status'] == 'success') {
+            print('Message sent successfully: ${jsonResponse['data']['id']}');
+            _addMessage(messageFile);
+          } else {
+            print('Error sending message: ${jsonResponse['message']}');
+          }
+        } else {
+          print('Failed to send message: ${response.statusCode}');
+        }
+      } else {
+        print('No file selected or invalid file path.');
+      }
+    } catch (e) {
+      print('Error selecting file: $e');
+    }
+  }
+
+  MediaType _getMediaFileType(String filePath) {
+    final mimeType = lookupMimeType(filePath) ?? 'application/octet-stream';
+    final type = mimeType.split('/')[0];
+    final subtype = mimeType.split('/')[1];
+    return MediaType(type, subtype);
+  }
+
+/*
+  void _handleFileSelection() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.any,
     );
@@ -677,11 +764,13 @@ class _ChatPageState extends State<ChatPage> {
       _addMessage(message);
     }
   }
+*/
 
-  void _handleMessageTap(BuildContext _, types.Message message) async {
+  void _handleMessageTap(BuildContext context, types.Message message) async {
     if (message is types.FileMessage) {
       var localPath = message.uri;
 
+      // Jika URI adalah URL, buka di browser
       if (message.uri.startsWith('http')) {
         try {
           final index =
@@ -691,13 +780,18 @@ class _ChatPageState extends State<ChatPage> {
             isLoading: true,
           );
 
+          final updatedStopMessage =
+              (_messages[index] as types.FileMessage).copyWith(
+            isLoading: false,
+          );
+
           setState(() {
             _messages[index] = updatedMessage;
           });
 
-          final client = http.Client();
-          final request = await client.get(Uri.parse(message.uri));
-          final bytes = request.bodyBytes;
+          // Jika URL adalah link file, unduh file dan simpan ke penyimpanan lokal
+          final response = await http.get(Uri.parse(message.uri));
+          final bytes = response.bodyBytes;
           final documentsDir = (await getApplicationDocumentsDirectory()).path;
           localPath = '$documentsDir/${message.name}';
 
@@ -705,21 +799,28 @@ class _ChatPageState extends State<ChatPage> {
             final file = File(localPath);
             await file.writeAsBytes(bytes);
           }
-        } finally {
-          final index =
-              _messages.indexWhere((element) => element.id == message.id);
-          final updatedMessage =
-              (_messages[index] as types.FileMessage).copyWith(
-            isLoading: null,
-          );
 
+          // Update status message
           setState(() {
-            _messages[index] = updatedMessage;
+            _messages[index] = updatedStopMessage;
           });
-        }
-      }
 
-      await OpenFilex.open(localPath);
+          // Buka file lokal
+          await OpenFilex.open(localPath);
+        } catch (e) {
+          // Jika terjadi error
+          print('Error opening file: $e');
+          // Jika tidak bisa membuka file lokal, coba buka di browser
+          if (await canLaunchUrl(message.uri as Uri)) {
+            await launchUrl(message.uri as Uri);
+          } else {
+            throw 'Could not launch ${message.uri}';
+          }
+        }
+      } else {
+        // Buka file lokal jika tidak berformat URL
+        await OpenFilex.open(localPath);
+      }
     }
   }
 
